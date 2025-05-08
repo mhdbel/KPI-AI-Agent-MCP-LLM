@@ -1,0 +1,6 @@
+[openai]
+API_KEY = "your-openai-api-key"
+
+[powerbi]
+ACCESS_TOKEN = "your-powerbi-oauth-token"
+DATASET_ID = "your-dataset-id"
