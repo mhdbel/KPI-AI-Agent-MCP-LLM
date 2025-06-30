@@ -5,8 +5,9 @@ from src.config import load_secrets
 def load_data_from_powerbi(source_config: dict) -> pd.DataFrame:
     """Fetch data from Power BI using the API."""
     try:
+        # CRITICAL FIX: Removed extra space before dataset_id
         api_url = (
-            f"https://api.powerbi.com/v1.0/myorg/datasets/ "
+            f"https://api.powerbi.com/v1.0/myorg/datasets/"
             f"{source_config['dataset_id']}/tables/"
             f"{source_config['table_name']}/rows"
         )

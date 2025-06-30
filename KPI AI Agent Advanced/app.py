@@ -31,10 +31,13 @@ def main():
     # Load data based on source
     if data_source == "CSV Files":
         try:
-            q1_path = "data/cases_Q1_current_year.csv"
-            q4_path = "data/cases_Q4_2024.csv"
+            q1_path = "KPI AI Agent Advanced/data/Q1 2025.csv" # Corrected path
+            q4_path = "KPI AI Agent Advanced/data/Q4 2024.csv" # Corrected path
             q1_df, q1_summary = load_data(q1_path)
             q4_df, q4_summary = load_data(q4_path)
+        except FileNotFoundError as e:
+            st.error(f"File not found: {e.filename}. Please ensure the data files are in the 'KPI AI Agent Advanced/data/' directory and match the specified names.")
+            return
         except Exception as e:
             st.error(f"Error loading CSV files: {str(e)}")
             return
