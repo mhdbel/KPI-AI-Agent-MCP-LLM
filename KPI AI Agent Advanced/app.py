@@ -1,11 +1,10 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import openai
+import plotly.express as px
 from src.data_pipeline import load_data, load_data_powerbi
-from src.eda import generate_eda_report, plot_kpi_distribution
+from src.eda import generate_eda_report
 from src.ahp_module import AHPAnalysis
-from src.config import load_secrets
+from src.config import load_secrets, query_llm
 
 st.set_page_config(
     page_title="Remote Fix KPI Analysis",
@@ -14,10 +13,11 @@ st.set_page_config(
 )
 
 def main():
-    secrets = load_secrets()
+    # Load secrets
+    secrets = load_secrets({"OPENAI_API_KEY", "POWERBI_ACCESS_TOKEN", "POWERBI_DATASET_ID"})
     openai.api_key = secrets["OPENAI_API_KEY"]
     
-    # SIDEBAR: Data Source Configuration
+    # Sidebar: Data Source Configuration
     st.sidebar.header("Data Source Configuration")
     data_source = st.sidebar.radio(
         "Select Data Source",
@@ -57,15 +57,19 @@ def main():
                     st.error("Dataset ID and Access Token are required.")
                     return
                 
-                source_config = {
+                source_config_q1 = {
                     "dataset_id": dataset_id,
-                    "access_token": access_token,
-                    "table_name": table_q1
+                    "table_name": table_q1,
+                    "access_token": access_token
                 }
-                q1_df, _ = load_data_powerbi(source_config)
+                q1_df, _ = load_data_powerbi(source_config_q1)
                 
-                source_config["table_name"] = table_q4
-                q4_df, _ = load_data_powerbi(source_config)
+                source_config_q4 = {
+                    "dataset_id": dataset_id,
+                    "table_name": table_q4,
+                    "access_token": access_token
+                }
+                q4_df, _ = load_data_powerbi(source_config_q4)
                 
                 if q1_df.empty or q4_df.empty:
                     st.error("Power BI returned empty datasets.")
@@ -98,18 +102,19 @@ def main():
         if selected_kpi not in q4_df.columns:
             st.error(f"KPI '{selected_kpi}' not found in Q4 data.")
         else:
-            try:
-                fig, plot_explanation = plot_kpi_distribution(q1_df, q4_df, selected_kpi)
-                st.pyplot(fig, use_container_width=True)
-                st.write("Plot Explanation:", plot_explanation)
-            except Exception as e:
-                st.error(f"Plotting error: {str(e)}")
+            fig = px.histogram(
+                pd.concat([q1_df.assign(Period="Q1"), q4_df.assign(Period="Q4")]),
+                x=selected_kpi,
+                color="Period",
+                marginal="box",
+                title=f"{selected_kpi} Distribution Comparison"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            plot_explanation = query_llm(f"Explain this plot for '{selected_kpi}'.")
+            st.write("Plot Explanation:", plot_explanation)
         
         # AHP DECISION ANALYSIS
         st.header("🎯 AHP Decision Analysis")
-        st.write("Adjust criteria importance using the sliders below:")
-        
-        # Default criteria comparisons
         default_comparisons = {
             ('Case Complexity', 'Staffing Levels'): 3,
             ('Case Complexity', 'Process Changes'): 5,
@@ -119,7 +124,6 @@ def main():
             ('Process Changes', 'Technology Adjustments'): 3
         }
         
-        # Create sliders for each comparison pair
         custom_weights = {}
         for pair in default_comparisons:
             label = f"{pair[0]} vs {pair[1]}"
@@ -146,7 +150,6 @@ def main():
                 0.5,
                 key="whatif_slider"
             )
-            # Example: Modify one criteria pair
             modified_weights = custom_weights.copy()
             modified_weights[('Case Complexity', 'Process Changes')] = int(new_weight * 9)
             new_weights = ahp.get_what_if(modified_weights)
@@ -170,17 +173,6 @@ def main():
                 st.write("Answer:", response)
     else:
         st.warning("No data loaded. Configure data sources and try again.")
-
-def query_llm(prompt: str) -> str:
-    try:
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=prompt,
-            max_tokens=200
-        )
-        return response.choices[0].text.strip()
-    except Exception as e:
-        return f"Error: {str(e)}"
 
 if __name__ == "__main__":
     main()
