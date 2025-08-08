@@ -1,42 +1,43 @@
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 from pandas_profiling import ProfileReport
-import openai
+from src.config import query_llm
 
-def generate_eda_report(df: pd.DataFrame) -> tuple[ProfileReport, str]:
+def generate_eda_report(df: pd.DataFrame, sample_size: int = None) -> tuple[ProfileReport, str]:
+    """
+    Generate an EDA report and LLM-based explanation.
+    
+    Args:
+        df (pd.DataFrame): Input dataset.
+        sample_size (int, optional): Number of rows to sample for large datasets.
+    
+    Returns:
+        tuple: (ProfileReport, LLM-generated explanation)
+    """
+    if sample_size and len(df) > sample_size:
+        df = df.sample(sample_size, random_state=42)
+    
     profile = ProfileReport(df, explorative=True)
-    explanation = get_eda_explanation(profile.to_json())
+    summary = (
+        f"Dataset Overview:\n{profile.get_description()['table']}\n"
+        f"Missing Values:\n{profile.get_description()['missing']}\n"
+        f"Correlations:\n{profile.get_description()['correlations']}"
+    )
+    explanation = get_eda_explanation(summary)
     return profile, explanation
 
-def get_eda_explanation(profile_json: str) -> str:
-    prompt = f"Explain this dataset's profile:\n{profile_json}"
+def get_eda_explanation(profile_summary: str) -> str:
+    """
+    Generate an LLM-based explanation of the EDA report.
+    
+    Args:
+        profile_summary (str): Summary of the EDA report.
+    
+    Returns:
+        str: LLM-generated explanation.
+    """
+    prompt = (
+        f"Explain this dataset's profile in simple terms:\n"
+        f"{profile_summary}\n"
+        "Highlight any key insights, such as missing values, correlations, or unusual patterns."
+    )
     return query_llm(prompt)
-
-def plot_kpi_distribution(q1_df: pd.DataFrame, q4_df: pd.DataFrame, kpi: str) -> tuple[plt.Figure, str]:
-    fig = plot_kpi(q1_df, q4_df, kpi)
-    explanation = explain_plot(fig, kpi)
-    return fig, explanation
-
-def plot_kpi(q1_df: pd.DataFrame, q4_df: pd.DataFrame, kpi: str) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.kdeplot(q1_df[kpi], ax=ax, label="Q1", shade=True)
-    sns.kdeplot(q4_df[kpi], ax=ax, label="Q4", shade=True)
-    ax.set_title(f"{kpi} Distribution Comparison")
-    ax.legend()
-    return fig
-
-def explain_plot(fig: plt.Figure, kpi: str) -> str:
-    prompt = f"Explain this plot for '{kpi}':\n{plt.gcf().canvas.tostring_rgb()}"
-    return query_llm(prompt)
-
-def query_llm(prompt: str) -> str:
-    try:
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=prompt,
-            max_tokens=200
-        )
-        return response.choices[0].text.strip()
-    except Exception as e:
-        return f"Error: {str(e)}"
